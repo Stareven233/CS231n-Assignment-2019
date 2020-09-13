@@ -1,0 +1,10 @@
+*.noe
+.idea/
+
+# Byte-compiled / optimized / DLL files
+/assignment[123]/cs231n/__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook
+.ipynb_checkpoints
