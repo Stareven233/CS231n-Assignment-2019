@@ -84,6 +84,9 @@ def softmax_loss_vectorized(W, X, y, reg):
     dW = np.exp(scores) / exp_sum.reshape(-1, 1)
     # (N, C) / (N, 1)
     dW[range(num_img), y] -= 1
+    # 至此的dW其实是d_scores，下文根据链式法则求导真正得到了dW
+    # 参见https://zhuanlan.zhihu.com/p/31562236，d_score即文中最后的df
+    # 再注：dW、df其实都是相对于d_loss而言，完整写法为d_loss/dW
     dW = X.T @ dW
     # 相当于X.T.dot(W)
     dW /= num_img

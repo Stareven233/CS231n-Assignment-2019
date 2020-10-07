@@ -1,10 +1,6 @@
-from __future__ import print_function
-
-from builtins import range
-from builtins import object
 import numpy as np
 import matplotlib.pyplot as plt
-from past.builtins import xrange
+
 
 class TwoLayerNet(object):
     """
@@ -80,6 +76,12 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        # h = np.maximum(0, X@W1 + b1)
+        h = np.clip(X@W1 + b1, 0, None)
+        # 这两行用处一样，将矩阵中小于0的元素置0，这体现了ReLU函数的处理结果
+        # h为隐层输出 (N, H)
+        scores = h@W2 + b2
+        # scores为最终输出 (N, C)
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -98,6 +100,15 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        scores -= np.max(scores, axis=1, keepdims=True)
+        # 防止溢出
+        correct_score = scores[range(N), y]
+        exp_row_sum = np.sum(np.exp(scores), axis=1, keepdims=True)
+        loss = np.sum(np.log(exp_row_sum)) - np.sum(correct_score)
+        # loss = np.sum(np.log(exp_row_sum) - correct_score.reshape(-1, 1))
+        # 若不使用reshape会导致计算出错
+        loss = loss/N + reg * (np.sum(W1**2) + np.sum(W2**2))
+        # 若此处 正则项按博客说的乘0.5将导致与correct_loss相差0.02
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -110,6 +121,27 @@ class TwoLayerNet(object):
         # grads['W1'] should store the gradient on W1, and be a matrix of same size #
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+        d_scores = np.exp(scores) / exp_row_sum
+        d_scores[range(N), y] -= 1
+        d_scores /= N
+        # (N, C) loss对scores的导数，见./softmax.py row84
+        # 而 loss 除N取平均，此处自然也要除N
+        # 参考 https://blog.csdn.net/SpicyCoder/article/details/95903137
+
+        grads['b2'] = np.sum(d_scores, axis=0)
+        # (C, ) = (N, C).sum(0)
+        # b为常数，按链式法则 scores=wx+b 对b求导为1
+        d_h = d_scores @ W2.T
+        # (N, H) = (N, C) * (H, C).T
+        grads['W2'] = h.T @ d_scores + 2*reg*W2
+        # (H, C) = (N, H).T * (N, C)
+        d_relu = (h > 0) * d_h
+        # (N, H)
+        # ##relu由max体现，而max的导数不大于0的取0，大于0的导数为本身的值
+        grads['W1'] = X.T @ d_relu + 2*reg*W1
+        # (D, H) = (N, D).T * (N, H)
+        grads['b1'] = np.sum(d_relu, axis=0)
 
         pass
 
