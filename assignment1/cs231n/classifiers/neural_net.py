@@ -170,6 +170,7 @@ class TwoLayerNet(object):
         - batch_size: Number of training examples to use per step.
         - verbose: boolean; if true print progress during optimization.
         """
+        # 能调整batch_size的SGD？？确定不是MBGD？
         num_train = X.shape[0]
         iterations_per_epoch = max(num_train / batch_size, 1)
 
@@ -188,6 +189,9 @@ class TwoLayerNet(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+            idx = np.random.choice(num_train, batch_size)
+            X_batch = X[idx]
+            y_batch = y[idx]
             pass
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -204,6 +208,10 @@ class TwoLayerNet(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+            self.params['W1'] -= learning_rate*grads['W1']
+            self.params['b1'] -= learning_rate*grads['b1']
+            self.params['W2'] -= learning_rate*grads['W2']
+            self.params['b2'] -= learning_rate*grads['b2']
             pass
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -250,6 +258,10 @@ class TwoLayerNet(object):
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        
+        h = np.clip(X@self.params['W1'] + self.params['b1'], 0, None)
+        scores = h@self.params['W2'] + self.params['b2']
+        y_pred = np.argmax(scores, axis=1)
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****

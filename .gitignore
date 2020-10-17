@@ -1,5 +1,6 @@
 *.noe
 .idea/
+.vscode/
 
 # Byte-compiled / optimized / DLL files
 /assignment[123]/cs231n/__pycache__/
