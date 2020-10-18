@@ -49,6 +49,12 @@ class TwoLayerNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        self.params['W1'] = np.random.randn(input_dim, hidden_dim) * weight_scale
+        self.params['W2'] = np.random.randn(hidden_dim, num_classes) * weight_scale
+        # 先由randn生成已标准化的数据，在通过逆标准化得到标准差为weight_scale的正态分布
+        self.params['b1'] = np.zeros(hidden_dim)
+        self.params['b2'] = np.zeros(num_classes)
+        # b应当是一个行向量，此处没指定，大概会根据维度自行调整吧，像转置那样
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -83,6 +89,10 @@ class TwoLayerNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        X = X.reshape(X.shape[0], -1)
+        z1 = X@self.params['W1'] + self.params['b1']  # N, H
+        h1 = np.maximum(z1, 0)  # ReLU
+        scores = h1@self.params['W2'] + self.params['b2']  # N, C
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -106,6 +116,31 @@ class TwoLayerNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+        N = X.shape[0]
+        W2 = self.params['W2']
+        W1 = self.params['W1']
+        # loss = -ln( e^i / sigma_j( e^j ) ) = -i + ln( sigma_j( e^j ) )
+        # i, j为scores中某行某列的一个元素
+        correct_scores = scores[range(N), y]
+        # print('correct_scores shape', correct_scores.shape)  # (3,)
+        sum_scores = np.sum(np.exp(scores), axis=1, keepdims=True)
+        # print('sum_scores shape', sum_scores.shape)  # (3, 1)
+        loss += np.sum(-correct_scores) + np.sum(np.log(sum_scores))
+        loss = loss/N + 0.5 * self.reg * (np.sum(W1**2) + np.sum(W2**2))
+
+        d_scores = np.exp(scores) / sum_scores
+        d_scores[range(N), y] -= 1
+        d_scores /= N
+        grads['b2'] = np.sum(d_scores, axis=0)
+        grads['W2'] = h1.T @ d_scores + self.reg * W2
+        d_h1 = d_scores @ self.params['W2'].T
+
+        d_z1 = (h1 > 0) * d_h1
+        grads['b1'] = np.sum(d_z1, axis=0)
+        # 加上keepdims=True会在train时报错，大概因为self.params都是向量而非矩阵
+        # b是行向量，axis==0, 而keepdims非必须
+        grads['W1'] = X.T @ d_z1 + self.reg * W1
 
         pass
 
@@ -178,6 +213,12 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        hidden_dims.append(num_classes)
+        before_dim = input_dim
+        for i, hidden_dim in enumerate(hidden_dims, start=1):
+          self.params[f'W{i}'] = np.random.randn(before_dim, hidden_dim) * weight_scale
+          self.params[f'b{i}'] = np.zeros(hidden_dim)
+          before_dim = hidden_dim
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -241,6 +282,17 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        scores = X.reshape(X.shape[0], -1)
+        caches = [()]
+        # 用空元组占据下标0
+        for i in range(1, self.num_layers):
+          # scores = scores@self.params[f'W{i}'] + self.params[f'b{i}']
+          # scores = np.maximum(scores, 0)
+          scores, cache = affine_relu_forward(scores, self.params[f'W{i}'], self.params[f'b{i}'])
+          caches.append(cache)
+        scores, cache =  affine_forward(scores, self.params[f'W{self.num_layers}'], self.params[f'b{self.num_layers}'])
+        caches.append(cache)
+        # 此处的cache与上方不同，不含relu_cache
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -268,6 +320,29 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        # correct_scores = scores[range(X.shape[0]), y]
+        # sum_scores = np.sum(np.exp(scores), axis=1, keepdims=True)
+        # loss += np.sum(-correct_scores) + np.sum(np.log(sum_scores))
+        # sum_reg = 0
+        # for i in range(1, self.num_layers+1):
+        #   sum_reg += np.sum(self.params[f'W{i}'] ** 2)
+        # loss = loss/N + 0.5*reg*sum_reg
+
+        # d_scores = np.exp(scores) / sum_scores
+        # d_scores[range(X.shape[0]), y] -= 1
+        # d_scores /= X.shape[0]
+        loss, d_scores = softmax_loss(scores, y)
+        for i in range(1, self.num_layers+1):
+          loss += 0.5 * self.reg * np.sum(self.params[f'W{i}'] ** 2)
+
+        dx, dw, db = affine_backward(d_scores, caches.pop())
+        grads[f'W{self.num_layers}'] = dw + self.reg * self.params[f'W{self.num_layers}']
+        grads[f'b{self.num_layers}'] = db + self.reg * self.params[f'b{self.num_layers}']
+        # 最后一层不带ReLu的
+        for i in range(self.num_layers-1, 0, -1):
+          dx, dw, db = affine_relu_backward(dx, caches[i])
+          grads[f'W{i}'] = dw + self.reg * self.params[f'W{i}']
+          grads[f'b{i}'] = db + self.reg * self.params[f'b{i}']
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
