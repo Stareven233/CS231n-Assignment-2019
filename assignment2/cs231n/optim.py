@@ -1,4 +1,6 @@
 import numpy as np
+# 参考 https://blog.csdn.net/bvl10101111/article/details/72616516
+
 
 """
 This file implements various first-order update rules that are commonly used
@@ -67,6 +69,12 @@ def sgd_momentum(w, dw, config=None):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    v = config['momentum']*v + config['learning_rate']*dw
+    w -= v
+    next_w = w
+    # 与下面的效果一致，但过不了给定初始v的相对差验证
+    # v = config['momentum']*v - config['learning_rate']*dw
+    # next_w = w + v
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -105,6 +113,10 @@ def rmsprop(w, dw, config=None):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    config['cache'] = config['decay_rate']*config['cache'] + (1-config['decay_rate'])*dw**2
+    w -= config['learning_rate']*dw / (np.sqrt(config['cache']) + config['epsilon'])
+    next_w = w
+    # config['cache']实际上存放的是历史的梯度平方
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -149,6 +161,13 @@ def adam(w, dw, config=None):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    config['t'] += 1
+    config['m'] = config['beta1']*config['m'] + (1-config['beta1'])*dw
+    config['v'] = config['beta2']*config['v'] + (1-config['beta2'])*dw**2
+    mt = config['m'] / (1 - config['beta1']**config['t'])
+    vt = config['v'] / (1 - config['beta2']**config['t'])
+    w -= config['learning_rate']*mt / (np.sqrt(vt) + config['epsilon'])
+    next_w = w
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
