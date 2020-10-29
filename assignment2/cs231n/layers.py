@@ -1,5 +1,6 @@
 from builtins import range
 import numpy as np
+# TODO 完成 batchnorm_backward
 
 
 def affine_forward(x, w, b):
@@ -202,6 +203,15 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        sample_mean = np.mean(x, axis=0)
+        sample_var = np.mean((x - sample_mean)**2, axis=0)
+        x_hat = (x - sample_mean) / np.sqrt(sample_var + eps)
+        out = x_hat*gamma + beta
+
+        cache = (x, sample_mean, sample_var, x_hat, eps, gamma, )
+        # cache难顶，要到了backword才知道
+        running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+        running_var = momentum * running_var + (1 - momentum) * sample_var
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -217,6 +227,8 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        x = (x - running_mean) / np.sqrt(running_var + eps)
+        out = x*gamma + beta
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -259,6 +271,54 @@ def batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    x, mean, var, x_hat, eps, gamma = cache
+    N = x.shape[0]
+
+    dbeta = np.sum(dout, axis=0)
+    d_tmp = dout
+
+    # out = x_hat*gamma + beta:
+    dgamma = np.sum(x_hat * d_tmp, axis=0)
+    # gamma与Xi逐元素对应相乘，跟beta一样要在列上累加
+    dx_hat = gamma * d_tmp
+
+    # x_hat = (x - sample_mean) / np.sqrt(sample_var + eps):
+    ue = x - mean
+    sita = np.sqrt(var + eps)
+    d_ue = (1 / sita) * dx_hat
+    d_sita = np.sum((-ue / sita**2) * dx_hat, axis=0)
+    # 分别为分子分母两部分
+
+    # (x - sample_mean): 
+    dx1 = d_ue
+    dmean1 = -np.sum(d_ue, axis=0)
+
+    # np.sqrt(sample_var + eps):
+    dvar = 0.5 * (var + eps)**(-0.5) * d_sita
+    # 形如 (a+b)**0.5 = z 对a的反向传播
+
+    # sample_var = np.mean((x - sample_mean)**2, axis=0):
+    dx_square = (1 / N) * dvar
+    dx_square = 2 * (x - mean) * dx_square
+
+    # x_mean = x - sample_mean:
+    dx2 = dx_square
+    dmean2 = -np.sum(dx_square, axis=0)
+    # 两个dmean没有在axis=0计算sum，结果dx相对值直接为1.0
+
+    dx3 = (1 / N) * dmean1
+    dx4 = (1 / N) * dmean2
+    # X由许多独立的样本Xi组成
+    # sample_mean = np.mean(x, axis=0) 实际上就是 ```mean = 1/N * Sigma_i=0_to_N(Xi)```
+    # 故对其中每个Xi都可求导得 dXi = 1/N * dmean
+    # 既然每个dXi结果一致，那么对于dX同样是 1/N * dmean (靠广播加到每行Xi上)，
+    # 注意这不代表dX每行的值都一样，dmean反向传来的梯度只是其中一部分
+    # 总之，mean这类的反向梯度计算直接用 1/N * dmean
+    # 参考 https://blog.csdn.net/LittleGreyWing/article/details/106967647
+
+    dx = dx1 + dx2 + dx3 + dx4
+    # 由计算图可知X一共有4个入口(包括两个在不同地方用于计算mean)，最后的结果都要加上
+    # 参考 https://blog.csdn.net/SpicyCoder/article/details/97796858
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -293,6 +353,34 @@ def batchnorm_backward_alt(dout, cache):
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+    x, mean, var, x_hat, eps, gamma = cache
+    N = x.shape[0]
+
+    dbeta = np.sum(dout, axis=0)
+    dgamma = np.sum(x_hat * dout, axis=0)
+
+    # dx = -gamma*dout * ((x - mean)**2 * (var + eps)**(-0.5) + np.sqrt(var)) / (N * var)
+    # 通过逐步推出链式法则各个中间部分的导数再相乘得到 dy/dx
+
+    # dx = (1. / N) * gamma * (var + eps) ** (-1. / 2.) * (N * dout - np.sum(dout, axis=0) - (x - mean) * (var + eps) ** (-1.0) * np.sum(dout * (x - mean), axis=0))
+    
+    # dx_hat = dout * gamma
+    # dsigma = -0.5 * np.sum(dx_hat * (x - mean), axis=0) * np.power(var + eps, -1.5)
+    # dmu = -np.sum(dx_hat / np.sqrt(var + eps), axis=0) - 2 * dsigma * np.sum(x - mean, axis=0) / N
+    # dx = dx_hat / np.sqrt(var + eps) + 2.0 * dsigma * (x - mean) / N + dmu / N
+    # 查到的很多都是这种做法，感觉完全没有差别，也不符合一行的要求
+
+    # dx = gamma * (dout - (dbeta + x_hat * dgamma)/N) * (1 / np.sqrt(var + eps))
+    # 来自 https://github.com/bingcheng1998/CS231n-2020-spring-assignment-solution/blob/main/assignment2/cs231n/layers.py#L259
+
+    # 题目要求 implementation fits on a single 80-character line，而且要略快于之前的
+    # 然而上面三种仅最后一种比较符合，而且速度也都非常不稳定，实在是不会了
+
+    # inv_sigma = 1. / np.sqrt(var + eps)
+    # dxhat = dout * gamma
+    # dx = (1. / N) * inv_sigma * (N * dxhat - np.sum(dxhat, axis=0) - x_hat * np.sum(dxhat * x_hat, axis=0))
+    # 也是完全不行
 
     pass
 
