@@ -1,6 +1,5 @@
 from builtins import range
 import numpy as np
-# TODO 完成 batchnorm_backward
 
 
 def affine_forward(x, w, b):
@@ -361,7 +360,7 @@ def batchnorm_backward_alt(dout, cache):
     dgamma = np.sum(x_hat * dout, axis=0)
 
     # dx = -gamma*dout * ((x - mean)**2 * (var + eps)**(-0.5) + np.sqrt(var)) / (N * var)
-    # 通过逐步推出链式法则各个中间部分的导数再相乘得到 dy/dx
+    # 自己推导的，通过逐步推出链式法则各个中间部分的导数再相乘得到 dy/dx
 
     # dx = (1. / N) * gamma * (var + eps) ** (-1. / 2.) * (N * dout - np.sum(dout, axis=0) - (x - mean) * (var + eps) ** (-1.0) * np.sum(dout * (x - mean), axis=0))
     
@@ -371,7 +370,7 @@ def batchnorm_backward_alt(dout, cache):
     # dx = dx_hat / np.sqrt(var + eps) + 2.0 * dsigma * (x - mean) / N + dmu / N
     # 查到的很多都是这种做法，感觉完全没有差别，也不符合一行的要求
 
-    # dx = gamma * (dout - (dbeta + x_hat * dgamma)/N) * (1 / np.sqrt(var + eps))
+    dx = gamma * (dout - (dbeta + x_hat * dgamma)/N) * (1 / np.sqrt(var + eps))
     # 来自 https://github.com/bingcheng1998/CS231n-2020-spring-assignment-solution/blob/main/assignment2/cs231n/layers.py#L259
 
     # 题目要求 implementation fits on a single 80-character line，而且要略快于之前的

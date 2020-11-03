@@ -1,6 +1,13 @@
-1. 
 root: F:\CODE\match\CV\CS231nAssignment
+
+1. 
 Batch normalization: alternative backward
 
 在\assignment2\cs231n\layers.py其中的batchnorm_backward_alt函数应当实现一种改进的batchnorm反向传播，而且要在一行之内，
 然而照着\assignment2\cs231n\BatchNormalization.ipynb的图拼成的式子却算不出来，网上也找不到答案。
+
+
+2.
+Batch normalization: Inline Question 1&2
+
+\assignment2\cs231n\BatchNormalization.ipynb里的两个Inline Question没有答案，两题的两个图都不理解...

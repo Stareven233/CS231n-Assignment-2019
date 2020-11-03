@@ -5,6 +5,7 @@ import numpy as np
 from cs231n.layers import *
 from cs231n.layer_utils import *
 
+# TODO 实现layernorm
 
 class TwoLayerNet(object):
     """
@@ -219,6 +220,11 @@ class FullyConnectedNet(object):
           self.params[f'W{i}'] = np.random.randn(before_dim, hidden_dim) * weight_scale
           self.params[f'b{i}'] = np.zeros(hidden_dim)
           before_dim = hidden_dim
+
+          
+          if self.normalization == 'batchnorm' and i < self.num_layers:
+            self.params[f'gamma{i}'] = np.ones(hidden_dim)
+            self.params[f'beta{i}'] = np.zeros(hidden_dim)
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -284,11 +290,16 @@ class FullyConnectedNet(object):
 
         scores = X.reshape(X.shape[0], -1)
         caches = [()]
-        # 用空元组占据下标0
+        # 用空元组占据下标0，每个元组形如(fc_cache, batchnorm_cache, relu_cache)
         for i in range(1, self.num_layers):
           # scores = scores@self.params[f'W{i}'] + self.params[f'b{i}']
           # scores = np.maximum(scores, 0)
-          scores, cache = affine_relu_forward(scores, self.params[f'W{i}'], self.params[f'b{i}'])
+          if self.normalization == 'batchnorm':
+            scores, cache = affine_batchnorm_relu_forward(
+              scores, self.params[f'W{i}'], self.params[f'b{i}'], self.params[f'gamma{i}'], self.params[f'beta{i}'], self.bn_params[i-1]
+            )
+          else:
+            scores, cache = affine_relu_forward(scores, self.params[f'W{i}'], self.params[f'b{i}'])
           caches.append(cache)
         scores, cache =  affine_forward(scores, self.params[f'W{self.num_layers}'], self.params[f'b{self.num_layers}'])
         caches.append(cache)
@@ -338,9 +349,12 @@ class FullyConnectedNet(object):
         dx, dw, db = affine_backward(d_scores, caches.pop())
         grads[f'W{self.num_layers}'] = dw + self.reg * self.params[f'W{self.num_layers}']
         grads[f'b{self.num_layers}'] = db + self.reg * self.params[f'b{self.num_layers}']
-        # 最后一层不带ReLu的
+        # 最后一层不带ReLu和batchnorm的单独算
         for i in range(self.num_layers-1, 0, -1):
-          dx, dw, db = affine_relu_backward(dx, caches[i])
+          if self.normalization == 'batchnorm':
+            dx, dw, db, grads[f'gamma{i}'], grads[f'beta{i}'] = affine_batchnorm_relu_backward(dx, caches[i])
+          else:
+            dx, dw, db = affine_relu_backward(dx, caches[i])
           grads[f'W{i}'] = dw + self.reg * self.params[f'W{i}']
           grads[f'b{i}'] = db + self.reg * self.params[f'b{i}']
         pass
