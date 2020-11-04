@@ -427,6 +427,18 @@ def layernorm_forward(x, gamma, beta, ln_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    # laynorm 是对每一行数据单独进行标准化
+    # sample_mean = x.mean(1).reshape(-1, 1)
+    # sample_var = x.var(1).reshape(-1, 1)
+    # 借助numpy现成的函数
+    sample_mean = np.mean(x, axis=1, keepdims=True)
+    sample_var = np.mean((x - sample_mean)**2, axis=1, keepdims=True)
+    # 需要keepdims=True，否则报错ValueError: operands could not be broadcast together with shapes (4,3) (4,) 
+    # 因为 axis=1 使结果shape为向量(n, )，但向量似乎默认行广播，与下方列广播需求不符
+    x_hat = (x - sample_mean) / np.sqrt(sample_var + eps)
+    out = x_hat*gamma + beta
+
+    cache = (x, sample_mean, sample_var, x_hat, eps, gamma, )
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -462,6 +474,60 @@ def layernorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    # ----------------------矩阵与向量--------------------------------
+    # row = np.random.randint(1, 4, size=(3, ))
+    # # 单行矩阵
+    # d = np.random.randint(1, 6, size=(3, ))
+    # # 向量
+    # print('row,d: ', f'{row},{d}', '\n')
+    # print(row * d, '\n')
+    # # 矩阵与向量，此时*为点乘
+    # print(row * d.reshape(-1, 1), '\n')
+    # # 矩阵与矩阵，此时*为矩阵乘
+    # ---------------------------------------------------------------
+
+    x, mean, var, x_hat, eps, gamma = cache
+    N = x.shape[0]
+
+    dbeta = np.sum(dout, axis=0)
+    d_tmp = dout
+
+    dgamma = np.sum(x_hat * d_tmp, axis=0)
+    dx_hat = gamma * d_tmp
+
+    # ------------------------失败的尝试-------------------------------
+    # ue = x - mean
+    # sita = np.sqrt(var + eps)
+    # d_ue = (1 / sita) * dx_hat
+    # d_sita = np.sum((-ue / sita**2) * dx_hat, axis=1, keepdims=False)
+    # # 与batchnorm不同之处：axis=1, keepdims
+
+    # dx1 = d_ue
+    # dmean1 = -np.sum(d_ue, axis=1, keepdims=True)
+    # # 与batchnorm不同之处：axis=1, keepdims
+
+    # dvar = 0.5 * (var.squeeze() + eps)**(-0.5) * d_sita
+
+    # dx_square = (1 / N) * dvar
+    # dx_square = 2 * ((x - mean).T * dx_square).T
+
+    # dx2 = dx_square
+    # dmean2 = -np.sum(dx_square, axis=1, keepdims=True)
+    # # 与batchnorm不同之处：axis=1, keepdims
+
+    # dx3 = (1 / N) * dmean1
+    # dx4 = (1 / N) * dmean2
+
+    # dx = dx1 + dx2 + dx3 + dx4
+
+    # 结果还是捣鼓不出来，这tm确定 slightly modifying 就好？？
+    # ---------------------------------------------------------------
+    
+    # dx_hat = dout * gamma  # 乘法运算操作数顺序可以更换
+    # dsigma = -0.5 * np.sum(dx_hat * (x - mean), axis=1) * np.power(var.squeeze() + eps, -1.5)
+    # dmu = -np.sum(dx_hat / np.sqrt(var + eps), axis=1).squeeze() - 2 * dsigma * np.sum(x - mean, axis=1) / N
+    # dx = dx_hat / np.sqrt(var + eps) + 2.0 * dsigma.reshape(-1, 1) * (x - mean) / N + dmu.reshape(-1, 1) / N
+    # 这份网上的代码也还是不行，dx的误差仍旧有0.5，吐了
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
