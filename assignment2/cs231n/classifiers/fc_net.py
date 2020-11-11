@@ -5,7 +5,6 @@ import numpy as np
 from cs231n.layers import *
 from cs231n.layer_utils import *
 
-# TODO 实现layernorm
 
 class TwoLayerNet(object):
     """
@@ -291,6 +290,7 @@ class FullyConnectedNet(object):
         scores = X.reshape(X.shape[0], -1)
         caches = [()]
         # 用空元组占据下标0，每个元组形如(fc_cache, batchnorm_cache, relu_cache)
+
         for i in range(1, self.num_layers):
           # scores = scores@self.params[f'W{i}'] + self.params[f'b{i}']
           # scores = np.maximum(scores, 0)
@@ -300,8 +300,15 @@ class FullyConnectedNet(object):
             )
           else:
             scores, cache = affine_relu_forward(scores, self.params[f'W{i}'], self.params[f'b{i}'])
+
+          if self.use_dropout:
+            scores, dp_cache = dropout_forward(scores, self.dropout_param)
+            cache = (cache, dp_cache)
+
           caches.append(cache)
+        
         scores, cache =  affine_forward(scores, self.params[f'W{self.num_layers}'], self.params[f'b{self.num_layers}'])
+        # 最后一层，不含relu, batchnorm, dropout等
         caches.append(cache)
         # 此处的cache与上方不同，不含relu_cache
         pass
@@ -351,10 +358,17 @@ class FullyConnectedNet(object):
         grads[f'b{self.num_layers}'] = db + self.reg * self.params[f'b{self.num_layers}']
         # 最后一层不带ReLu和batchnorm的单独算
         for i in range(self.num_layers-1, 0, -1):
+          cache = caches[i]
+
+          if self.use_dropout:
+            cache, dp_cache = cache
+            dx = dropout_backward(dx, dp_cache)
+
           if self.normalization == 'batchnorm':
-            dx, dw, db, grads[f'gamma{i}'], grads[f'beta{i}'] = affine_batchnorm_relu_backward(dx, caches[i])
+            dx, dw, db, grads[f'gamma{i}'], grads[f'beta{i}'] = affine_batchnorm_relu_backward(dx, cache)
           else:
-            dx, dw, db = affine_relu_backward(dx, caches[i])
+            dx, dw, db = affine_relu_backward(dx, cache)
+
           grads[f'W{i}'] = dw + self.reg * self.params[f'W{i}']
           grads[f'b{i}'] = db + self.reg * self.params[f'b{i}']
         pass
