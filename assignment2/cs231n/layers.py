@@ -796,6 +796,18 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    N, C, H, W = x.shape
+    pool_height, pool_width, stride = pool_param.values()
+    H_out = 1 + (H - pool_height) // stride
+    W_out = 1 + (W - pool_width) // stride
+    out = np.zeros(shape=(N, C, H_out, W_out))
+
+    for n in range(N):
+      for c in range(C):
+        for i in range(H_out):
+          for j in range(W_out):
+            out[n, c, i, j] = np.max(x[n, c, i*stride : i*stride+pool_height, j*stride : j*stride+pool_width])
+
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -823,6 +835,23 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    x, pool_param = cache
+    N, C, H, W = x.shape
+    pool_height, pool_width, stride = pool_param.values()
+    H_out = 1 + (H - pool_height) // stride
+    W_out = 1 + (W - pool_width) // stride
+    dx = np.zeros_like(x)
+
+    # for n in range(N):
+    #   for c in range(C):
+    for i in range(H_out):
+      for j in range(W_out):
+        # mask = np.argmax(x[:, :, i*stride: i*stride+pool_height, j*stride: j*stride+pool_width], axis=(2, 3))
+        # argmax不行，只能指定一个轴
+        x_field = x[:, :, i*stride : i*stride+pool_height, j*stride : j*stride+pool_width]
+        x_field_max = np.max(x_field, axis=(2, 3), keepdims=True)
+        dx[:, :, i*stride: i*stride+pool_height, j*stride: j*stride+pool_width] = (x_field == x_field_max) * dout[:, :, i, j][:, :, None, None]
+        # None用于在矩阵指定位置添加一维。如data的shape为(3, 3)，则data[:, None]的shape是(3,1,3)，data(:, :, None)的shape是(3, 3, 1)。
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
