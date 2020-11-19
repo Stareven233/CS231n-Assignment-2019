@@ -1,6 +1,7 @@
 from builtins import range
 import numpy as np
 
+# TODO: implement conv_forward_naive
 
 def affine_forward(x, w, b):
     """
@@ -651,7 +652,6 @@ def conv_forward_naive(x, w, b, conv_param):
       - 'stride': The number of pixels between adjacent receptive fields in the
         horizontal and vertical directions.
       - 'pad': The number of pixels that will be used to zero-pad the input. 
-        
 
     During padding, 'pad' zeros should be placed symmetrically (i.e equally on both sides)
     along the height and width axes of the input. Be careful not to modfiy the original
@@ -670,6 +670,20 @@ def conv_forward_naive(x, w, b, conv_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    s, pad = conv_param['stride'], conv_param['pad']
+    hh, ww = w.shape[2], w.shape[3]
+    newx = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad), ), 'constant', constant_values=0)
+
+    newh = 1 + (x.shape[2] + 2 * pad - hh) // s
+    neww = 1 + (x.shape[3] + 2 * pad - ww) // s
+    f_num = w.shape[0]
+    out = np.zeros(shape=(x.shape[0], f_num, newh, neww))
+
+    for n in range(x.shape[0]):
+      for f in range(f_num):
+        for i in range(newh):
+          for j in range(neww):
+            out[n, f, i, j] = np.sum(newx[n, :, i*s : i*s+hh, j*s : j*s+ww] * w[f, :, :, :]) + b[f]
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -688,6 +702,12 @@ def conv_backward_naive(dout, cache):
     - dout: Upstream derivatives.
     - cache: A tuple of (x, w, b, conv_param) as in conv_forward_naive
 
+      - x: Input data of shape (N, C, H, W)
+      - w: Filter weights of shape (F, C, HH, WW)
+      - b: Biases, of shape (F,)
+      - conv_param: A dictionary with the following keys:
+      --> dout: shape(N, F, H' W')
+
     Returns a tuple of:
     - dx: Gradient with respect to x
     - dw: Gradient with respect to w
@@ -698,6 +718,49 @@ def conv_backward_naive(dout, cache):
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+    x, w, b, conv_param = cache
+    _, _, HH, WW = w.shape
+    N, F, H_out, W_out = dout.shape
+    stride, pad = conv_param['stride'], conv_param['pad']
+    x_pad = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad), ), mode='constant', constant_values=0)
+    # 这个x_pad才是前向传播时真正参与卷积的x
+
+    db = np.sum(dout, axis=(0, 2, 3))
+    dx_pad = np.zeros_like(x_pad)
+    dx = np.zeros_like(x)
+    dw = np.zeros_like(w)
+
+    # 计算公式参考：https://blog.csdn.net/weixin_44538273/article/details/86678435
+    # 代码参考：https://blog.csdn.net/LittleGreyWing/article/details/106967647 CNN节相应出黑字部分
+
+    # 原本看了上述公式是打算直接照着卷积，然而发现shape不匹配，很迷惑
+    # dw, _ = conv_forward_naive(x, dout.swapaxes(0, 1), np.zeros_like(b), {'stride': 1, 'pad': 0})
+    # dx, _ = conv_forward_naive(np.pad(dout), w[::-1, ...])
+
+    # 参考了网上代码后得到的结果
+    for n in range(N):
+      for f in range(F):
+        for j in range(H_out):
+          for k in range(W_out):
+            dw[f] += x_pad[n, :, j*stride: j*stride+HH, k*stride: k*stride+WW] * dout[n, f, j, k]
+            # x*w=z --> dL/dw = dL/dz * dz/dw
+            # 前向卷积时：x_jk * w_00 + x_jk+1 * w_01 + ... = out_jk
+            # 故：dw_00 = dout_jk * x_jk
+            # 同理：dw_01 = dout_jk * x_jk+1 ...
+            # 可得；dw = dout_jk * x[j:j+hh, k:k+ww]
+            # 再考虑整个输出，所有样本，就有了上式：
+            #   dw[f, :, :, :] = Sigma_j=0-h_k=0-w{ dout[n, f, j, k] * x_pad[n, :, j:j+hh, k: k+ww] }
+            # 这个本质跟上述CSDN连接(计算公式)中卷积计算dw的图是一致的
+
+            dx_pad[n, :, j*stride: j*stride+HH, k*stride: k*stride+WW] += w[f] * dout[n, f, j, k]
+            # x*w=z --> dL/dw = dL/dz * dz/dx
+            # 跟上述求dw一样的道理，都可以由 x_jk * w_00 + x_jk+1 * w_01 + ... = out_jk 推出
+            # 感觉跟一般的反向传播一样，只是卷积中每个x元素的导数要将它所有参与计算的所有out元素的导数考虑进来(加起来)
+
+
+    dx = dx_pad[:, :, pad: -pad, pad: -pad]
+    # 最后去掉两边的pad就得到了原始的x
 
     pass
 
