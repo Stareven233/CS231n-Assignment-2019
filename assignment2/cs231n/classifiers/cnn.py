@@ -55,6 +55,18 @@ class ThreeLayerConvNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+
+        input_C, input_H, input_W = input_dim
+        self.params[f'W1'] = np.random.randn(num_filters, input_C, filter_size, filter_size) * weight_scale
+        self.params[f'b1'] = np.zeros(num_filters)
+        
+        h1_dim = num_filters * input_H*input_W//4
+        # 应该是取一个样本时卷积后数据size: (1, F, H_out, W_out)
+        self.params[f'W2'] = np.random.randn(h1_dim, hidden_dim) * weight_scale
+        self.params[f'b2'] = np.zeros(hidden_dim)
+        
+        self.params[f'W3'] = np.random.randn(hidden_dim, num_classes) * weight_scale
+        self.params[f'b3'] = np.zeros(num_classes)
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -95,6 +107,16 @@ class ThreeLayerConvNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        scores, conv_cache = conv_relu_pool_forward(X, W1, b1, conv_param, pool_param)
+        scores, a2_cache = affine_relu_forward(scores, W2, b2)
+        # affine_forward里会自己reshpae: new_x = X.reshape(X.shape[0], -1)
+        scores, a3_cache = affine_forward(scores, W3, b3)
+
+        # shifted_logits = scores - np.max(scores, axis=1, keepdims=True)
+        # Z = np.sum(np.exp(shifted_logits), axis=1, keepdims=True)
+        # log_probs = shifted_logits - np.log(Z)
+        # scores = np.exp(log_probs)
+
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -118,6 +140,21 @@ class ThreeLayerConvNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        loss, dout = softmax_loss(scores, y)
+        loss += 0.5 * self.reg * (np.sum(W1**2) + np.sum(W2**2) + np.sum(W3**2))
+        # https://blog.csdn.net/SpicyCoder/article/details/98749292
+        # dout是最后一层affine的输出的导数
+
+        # grads['b3'] = np.sum(dout, axis=0)
+        # grads['W3'] = X.T @ dout
+        # dh2 = dout @ W3.T
+        # grads['b2'] = 
+        da2, grads['W3'], grads['b3'] = affine_backward(dout, a3_cache)
+        da1, grads['W2'], grads['b2'] = affine_relu_backward(da2, a2_cache)
+        dx, grads['W1'], grads['b1'] = conv_relu_pool_backward(da1, conv_cache)
+        grads['W3'] = grads['W3'] + self.reg*W3
+        grads['W2'] = grads['W2'] + self.reg*W2
+        grads['W1'] = grads['W1'] + self.reg*W1
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****

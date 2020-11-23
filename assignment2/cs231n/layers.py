@@ -1,8 +1,6 @@
 from builtins import range
 import numpy as np
 
-# TODO: implement conv_forward_naive
-
 def affine_forward(x, w, b):
     """
     Computes the forward pass for an affine (fully-connected) layer.
@@ -879,6 +877,8 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
       - running_mean: Array of shape (D,) giving running mean of features
       - running_var Array of shape (D,) giving running variance of features
 
+      # 实际上↑↑↑ running_mean 与 running_var 应该也是 shape(C,)
+
     Returns a tuple of:
     - out: Output data, of shape (N, C, H, W)
     - cache: Values needed for the backward pass
@@ -893,6 +893,22 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+    N, C, H, W = x.shape
+    x_new = x.transpose(0, 2, 3, 1).reshape(N*H*W , C)
+    out, cache = batchnorm_forward(x_new, gamma, beta, bn_param)
+    out = out.reshape(N, H, W, C).transpose(0, 3, 1, 2)
+
+    # x.transpose(): 相当于转置，与x.T一样
+    # x.transpose(0, 2, 3, 1): 将1轴的换到最后一轴，原本的(N, C, H, W)将变为(N, H, W, C)
+
+    # reshape之前交换C轴到最后，才能保证reshape后C轴上数据一致...
+    # 想像图片是三层的饼干，N个饼干并排放在桌子上，mean与var形状是单个饼干从一面笔直穿过另一面取出的一条，即(1, 1, C)
+    # 依据来源于题目：
+    # If the feature map was produced using convolutions, then we expect every feature channel's statistics 
+    # e.g. mean, variance to be relatively consistent both between different images, and different locations within the same image
+    #  -- after all, every feature channel is produced by the same convolutional filter
+    # 即卷积后的数据视为多层饼干，可假定每层上单个饼干的不同部分甚至各个饼干间都是相似的，因为他们都是同一卷积核计算结果
 
     pass
 
@@ -928,6 +944,10 @@ def spatial_batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    N, C, H, W = dout.shape
+    dout_new = dout.transpose(0, 2, 3, 1).reshape(N*H*W, C)
+    dx, dgamma, dbeta = batchnorm_backward(dout_new, cache)
+    dx = dx.reshape(N, H, W, C).transpose(0, 3, 1, 2)
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
