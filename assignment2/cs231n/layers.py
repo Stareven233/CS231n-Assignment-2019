@@ -488,12 +488,6 @@ def layernorm_backward(dout, cache):
     x, mean, var, x_hat, eps, gamma = cache
     N = x.shape[0]
 
-    dbeta = np.sum(dout, axis=0)
-    d_tmp = dout
-
-    dgamma = np.sum(x_hat * d_tmp, axis=0)
-    dx_hat = gamma * d_tmp
-
     # ------------------------失败的尝试-------------------------------
     # ue = x - mean
     # sita = np.sqrt(var + eps)
@@ -522,11 +516,22 @@ def layernorm_backward(dout, cache):
     # 结果还是捣鼓不出来，这tm确定 slightly modifying 就好？？
     # ---------------------------------------------------------------
     
-    # dx_hat = dout * gamma  # 乘法运算操作数顺序可以更换
-    # dsigma = -0.5 * np.sum(dx_hat * (x - mean), axis=1) * np.power(var.squeeze() + eps, -1.5)
-    # dmu = -np.sum(dx_hat / np.sqrt(var + eps), axis=1).squeeze() - 2 * dsigma * np.sum(x - mean, axis=1) / N
-    # dx = dx_hat / np.sqrt(var + eps) + 2.0 * dsigma.reshape(-1, 1) * (x - mean) / N + dmu.reshape(-1, 1) / N
-    # 这份网上的代码也还是不行，dx的误差仍旧有0.5，吐了
+    # ------------------------网上博客的答案---------------------------
+    # dgamma = np.sum(x_hat * dout, axis=0)
+    # dbeta = np.sum(dout, axis=0)  # (D, )
+    # dx = (1. / N) * gamma * (var + eps) ** (-1. / 2.) * (N * dout - np.sum(dout, axis=0) - (x - mean) * (var + eps) ** (-1.0) * np.sum(dout * (x - mean), axis=0))
+    # 只有dgamma跟dbeta对了，dx完全错误，有个锤子用，跟我一个水平
+    # ---------------------------------------------------------------
+
+    # ------------------------github上找到的答案-----------------------
+    dbeta = dout.sum(0)
+    dgamma = (x_hat * dout).sum(0)
+    dx_hat = dout * gamma  # 乘法运算操作数顺序可以更换
+    dsigma = -0.5 * np.sum(dx_hat * (x - mean), axis=1) * np.power(var.squeeze() + eps, -1.5)
+    dmu = -np.sum(dx_hat / np.sqrt(var + eps), axis=1).squeeze() - 2 * dsigma * np.sum(x - mean, axis=1) / N
+    dx = dx_hat / np.sqrt(var + eps) + 2.0 * dsigma.reshape(-1, 1) * (x - mean) / N + dmu.reshape(-1, 1) / N
+    # dx的相对差仍有0.5...
+    # ---------------------------------------------------------------
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -988,6 +993,41 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    N, C, H, W = x.shape
+    G_num = C//G
+
+    # 照着layernorm与上方spatial_batchnorm_forward自己写的
+
+    x_new = x.transpose(0, 2, 3, 1).reshape(N, H, W, G, G_num)
+    # N, C, H, W --> N, H, W, C --> N, H, W, G, G_num
+    x_new = x_new.transpose(0, 3, 1, 2, 4).reshape(N*G, H*W*G_num)
+    # N, H, W, G, G_num --> N, G, H, W, G_num --> N_new, D
+
+    sample_mean = np.mean(x_new, axis=1, keepdims=True)
+    sample_var = np.mean((x_new - sample_mean)**2, axis=1, keepdims=True)
+    x_hat = (x_new - sample_mean) / np.sqrt(sample_var + eps)
+
+    x_hat = x_hat.reshape(N, G, H, W, G_num).transpose(0, 2, 3, 1, 4)
+    # N_new, D --> N, G, H, W, G_num --> N, H, W, G, G_num
+    x_hat = x_hat.reshape(N, H, W, C).transpose(0, 3, 1, 2)
+    # N, H, W, G, G_num --> N, H, W, C --> N, C, H, W
+
+    out = x_hat*gamma + beta
+    cache = (x, sample_mean, sample_var, x_hat, eps, gamma, G, )
+
+
+    # 网络上使用了np.mean与np.var并设置了axis的
+
+    # # 将特征通道数分组，按照分组重新设置形状
+    # x_group = x.reshape((N, G, G_num, H, W))
+    # mean = np.mean(x_group, axis=(2, 3, 4), keepdims=True)
+    # var = np.var(x_group, axis=(2, 3, 4), keepdims=True)
+    # x_norm = (x_group - mean) / np.sqrt(var + eps)  # 归一化
+    # x_norm = x_norm.reshape((N, C, H, W))  # 还原维度
+    # out = x_norm * gamma + beta
+    # cache = (x, gamma, beta, G, eps, mean, var, x_norm)
+
+    # 两种方法确实一样，只是用了np.var的简单许多，也更清晰...
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -1017,6 +1057,45 @@ def spatial_groupnorm_backward(dout, cache):
     # This will be extremely similar to the layer norm implementation.        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+    N, C, H, W = dout.shape
+
+    # ------------------------网上博客的答案---------------------------
+    # x, mean, var, x_norm, eps, gamma, G = cache
+    # dbeta = np.sum(dout, axis=(0, 2, 3), keepdims=True)
+    # dgamma = np.sum(dout * x_norm, axis=(0, 2, 3), keepdims=True)
+
+    # dx_norm = dout * gamma
+    # dx_groupnorm = dx_norm.reshape((N, G, C // G, H, W))
+
+    # x_group = x.reshape((N, G, C // G, H, W))
+    # dvar = np.sum(dx_groupnorm * -1.0 / 2 * (x_group - mean) / (var + eps) ** (3.0 / 2), axis=(2, 3, 4), keepdims=True)
+
+    # N_GROUP = C // G * H * W
+    # dmean1 = np.sum(dx_groupnorm * -1.0 / np.sqrt(var + eps), axis=(2, 3, 4), keepdims=True)
+    # dmean2_var = dvar * -2.0 / N_GROUP * np.sum(x_group - mean, axis=(2, 3, 4), keepdims=True)
+    # dmean = dmean1 + dmean2_var
+
+    # dx_group1 = dx_groupnorm * 1.0 / np.sqrt(var + eps)
+    # dx_group2_mean = dmean * 1.0 / N_GROUP
+    # dx_group3_var = dvar * 2.0 / N_GROUP * (x_group - mean)
+    # dx_group = dx_group1 + dx_group2_mean + dx_group3_var
+
+    # dx = dx_group.reshape((N, C, H, W))
+    # # dx error:  1.0 完全不行
+    # ---------------------------------------------------------------
+
+    x, mean, var, x_hat, eps, gamma, G = cache
+    dgamma = np.sum(dout * x_hat, axis=(0,2,3), keepdims=True)
+    dbeta = np.sum(dout, axis=(0,2,3), keepdims=True)
+    N, C, H, W = x.shape
+    x_trans = x.reshape(N, G, C // G, H, W)
+    m = C // G * H * W
+    dx_hat = (dout * gamma).reshape(N, G, C // G, H, W)
+    dvar = np.sum(dx_hat * (x_trans - mean) * (-0.5) * np.power((var + eps), -1.5), axis=(2,3,4), keepdims=True)
+    dmean = np.sum(dx_hat * (-1) / np.sqrt(var + eps), axis=(2,3,4), keepdims=True) + dvar * np.sum(-2 * (x_trans - mean), axis=(2,3,4), keepdims=True) / m
+    dx = dx_hat / np.sqrt(var + eps) + dvar * 2 * (x_trans - mean) / m + dmean / m
+    dx = dx.reshape(N, C, H, W)
 
     pass
 
