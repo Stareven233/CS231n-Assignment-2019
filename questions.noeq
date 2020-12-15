@@ -13,9 +13,18 @@ Batch normalization: Inline Question 1&2
 
 \assignment2\cs231n\BatchNormalization.ipynb里的两个Inline Question没有答案，两题的两个图都不理解...
 
+
 3.
 Layer normalization: layernorm_backward
 
 \assignment2\cs231n\BatchNormalization.ipynb里倒数第二个cell
 对应\assignment2\cs231n\layers.py里layernorm_backward函数的dx计算
 自己推的与网上找的都差了0.5，原因不明
+
+
+4.
+Group normalization: spatial_groupnorm_backward
+
+\assignment2\cs231n\ConvolutionalNetworks.ipynb里倒数第二个cell
+对应\assignment2\cs231n\layers.py里spatial_groupnorm_backward函数的dx计算
+题目说是跟layernorm的反向传播很像，然而也确实很像，指dx error 1.0 ...
