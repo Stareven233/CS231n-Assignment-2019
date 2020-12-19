@@ -177,6 +177,7 @@ class CaptioningSolver(object):
           classified by the model.
         """
         return 0.0
+        # 好像就是整个复制粘贴过来，这个函数不需要就return结束了
 
         # Maybe subsample the data
         N = X.shape[0]

@@ -97,7 +97,9 @@ class CaptioningRNN(object):
         # after receiving word t. The first element of captions_in will be the START
         # token, and the first element of captions_out will be the first word.
         captions_in = captions[:, :-1]
+        # 应该是rnn中的输入x，x[t]推出score[t]，由于是train模式，score[t]不会作为x[t+1]，最后一个词由x[n-1]推出，故不需给出
         captions_out = captions[:, 1:]
+        # 相当于每个时间步中正确的输出y[t]，即x[t+1]，用于跟score[t]一起计算loss
 
         # You'll need this
         mask = (captions_out != self._null)
@@ -105,6 +107,7 @@ class CaptioningRNN(object):
         # Weight and bias for the affine transform from image features to initial
         # hidden state
         W_proj, b_proj = self.params['W_proj'], self.params['b_proj']
+        # 其实就是把VGG的FC7层截取的输入的图片features，经过这两个参数的仿射后结果作为h(0)输入给rnn
 
         # Word embedding matrix
         W_embed = self.params['W_embed']
@@ -142,6 +145,24 @@ class CaptioningRNN(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+        # forward pass
+        # (1)
+        h0 = features @ W_proj + b_proj
+        # (2)
+        x, embed_cache = word_embedding_forward(captions_in, W_embed)
+        # (3)
+        h, rnn_cache = rnn_forward(x, h0, Wx, Wh, b)
+        # (4)
+        scores, score_cache = temporal_affine_forward(h, W_vocab, b_vocab)
+        # (5)
+        loss, dscores = temporal_softmax_loss(scores, captions_out, mask)
+
+        # backword pass
+        dh, grads['W_vocab'], grads['b_vocab'] = temporal_affine_backward(dscores, score_cache)
+        dx, dh0, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dh, rnn_cache)
+        grads['W_embed'] = word_embedding_backward(dx, embed_cache)
+        grads['W_proj'] = features.T @ dh0
+        grads['b_proj'] = dh0.sum(axis=0)
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -210,6 +231,22 @@ class CaptioningRNN(object):
         # you are using an LSTM, initialize the first cell state to zeros.        #
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+        x_next = np.ones((N, ), dtype=np.int32) * self._start
+        # 因为下方将x_next作为index使用，必须要整型，x_embed = W_embed[x_next]
+        h_prev = features @ W_proj + b_proj
+        for t in range(max_length):
+            # (1)
+            x_embed = W_embed[x_next]
+            # (2)
+            h, _ = rnn_step_forward(x_embed, h_prev, Wx, Wh, b)
+            h_prev = h  # N, H
+            # (3)
+            scores = h @ W_vocab + b_vocab  # N, V
+            # (4)
+            x_next = np.argmax(scores, axis=1)
+            captions[:, t] = x_next
+            # 题目要求：The first element of captions should be the first sampled word, not the <START> token.
 
         pass
 

@@ -1,3 +1,5 @@
+#TODO First implement the function rnn_step_forward
+
 from __future__ import print_function, division
 from builtins import range
 import numpy as np
@@ -36,6 +38,8 @@ def rnn_step_forward(x, prev_h, Wx, Wh, b):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    next_h = np.tanh(x@Wx + prev_h@Wh + b)
+    cache = (x, prev_h, Wx, Wh, next_h, )
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -69,6 +73,17 @@ def rnn_step_backward(dnext_h, cache):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    x, prev_h, Wx, Wh, next_h = cache
+    du3 = dnext_h * (1 - next_h**2) # (N, H)
+    # 自己画计算图推导的！！此处 next_h = tanh(u3), tanh应用于u3里每一个元素
+    # 故反向传播时也通过逐元素相乘* 让(1 - next_h**2)应用于每个dnext_h元素
+    dx = du3 @ Wx.T
+    dWx = x.T @ du3
+    # du3 = du1 = d(x @ Wx)
+    dprev_h = du3 @ Wh.T
+    dWh = prev_h.T @ du3
+    # du3 = du2 = d(Wh @ prev_h)
+    db = du3.sum(axis=0)
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -104,6 +119,24 @@ def rnn_forward(x, h0, Wx, Wh, b):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    h = []
+    cache = []
+    #$$ N, T, D = x.shape
+    #$$ _, H = h0.shape
+    #$$ h = np.zeros((N, T, H))
+    #$$ prev_h = h0
+    for t in range(x.shape[1]):
+        cur_h, cur_cache = rnn_step_forward(x[:, t, :], h0, Wx, Wh, b)
+        h.append(cur_h)  # (T, N, D, )
+        cache.append(cur_cache)
+        h0 = cur_h
+        #$$ h[:, iter_time, :],_ = rnn_step_forward(x[:, iter_time, :], prev_h, Wx, Wh, b)
+        #$$ prev_h = h[:, iter_time, :]
+    #$$ cache = (h0, h, Wx, Wh, x)
+    # $$注释部分是另一种做法，对cache的处理更麻烦
+
+    h = np.array(h)
+    h = h.transpose(1, 0, 2)   # (N, T, D, )
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -140,6 +173,21 @@ def rnn_backward(dh, cache):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    N, T, H = dh.shape
+    D = cache[0][0].shape[1]
+    dx = np.zeros((N, T, D))
+    dh0 = np.zeros((N, H))
+    dWx = np.zeros((D, H))
+    dWh = np.zeros((H, H))
+    db = np.zeros((H, ))
+
+    for t in range(T-1, -1, -1):
+        dx[:, t, :], dh0, *wb = rnn_step_backward(dh[:, t, :]+dh0, cache[t])
+        dWx += wb[0]
+        dWh += wb[1]
+        db += wb[2]
+    # 需要注意的是这里rnn_step_backward第一个参数dh由两部分组成
+    # 推测一部分是下一层传来的(next_h)，另一部分由当前输出层传回(dh)
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -157,7 +205,7 @@ def word_embedding_forward(x, W):
 
     Inputs:
     - x: Integer array of shape (N, T) giving indices of words. Each element idx
-      of x muxt be in the range 0 <= idx < V.
+    of x muxt be in the range 0 <= idx < V.
     - W: Weight matrix of shape (V, D) giving word vectors for all words.
 
     Returns a tuple of:
@@ -171,6 +219,16 @@ def word_embedding_forward(x, W):
     # HINT: This can be done in one line using NumPy's array indexing.           #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+    out = W[x, :]
+    # 相当于：
+    # N, T = x.shape
+    # V, D = W.shape
+    # out = np.zeros((N, T, D))
+    # for n in range(N):
+    #     for t in range(T):
+    #         out[n, t, :] = W[x[n, t], :]
+    cache = (x, W.shape, )
 
     pass
 
@@ -205,6 +263,22 @@ def word_embedding_backward(dout, cache):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    x, w_shape = cache
+    dW = np.zeros(w_shape)
+    np.add.at(dW, x, dout)
+    # np.add.at: https://blog.csdn.net/shinetzh/article/details/77850567
+    # forward过程相当于是用W的向量替换x的对应位置，没有算术运算，反向传播时就将dout按位置分配回dW
+    # 即按照对应x下标将取dout中的值加到dW上
+
+    # 相当于：
+    # N, T = x.shape
+    # V, D = W.shape
+    # dW = np.zeros_like(W)
+    # for v in range(V):
+    #     for n in range(N):
+    #         for t in range(T):
+    #             if x[n, t] == v:
+    #                 dW[x[n, t], :] += dout[n, t, :]
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -439,9 +513,9 @@ def temporal_softmax_loss(x, y, mask, verbose=False):
     Inputs:
     - x: Input scores, of shape (N, T, V)
     - y: Ground-truth indices, of shape (N, T) where each element is in the range
-         0 <= y[i, t] < V
+        0 <= y[i, t] < V
     - mask: Boolean array of shape (N, T) where mask[i, t] tells whether or not
-      the scores at x[i, t] should contribute to the loss.
+    the scores at x[i, t] should contribute to the loss.
 
     Returns a tuple of:
     - loss: Scalar giving loss

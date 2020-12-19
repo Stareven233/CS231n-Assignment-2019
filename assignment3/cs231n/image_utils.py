@@ -5,7 +5,11 @@ from builtins import range
 import urllib.request, urllib.error, urllib.parse, os, tempfile
 
 import numpy as np
-from scipy.misc import imread, imresize
+# from scipy.misc import imread, imresize
+import numpy as np
+from PIL import Image
+from imageio import imread
+from io import BytesIO
 
 """
 Utility functions used for viewing and processing images.
@@ -60,11 +64,16 @@ def image_from_url(url):
     """
     try:
         f = urllib.request.urlopen(url)
-        _, fname = tempfile.mkstemp()
-        with open(fname, 'wb') as ff:
-            ff.write(f.read())
-        img = imread(fname)
-        os.remove(fname)
+        # _, fname = tempfile.mkstemp()
+        # with open(fname, 'wb') as ff:
+        #     ff.write(f.read())
+        
+        img = BytesIO(f.read())
+        img = Image.open(img)
+        # 原方法(缓存文件作中转)在jupyter中总是报错：PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\Noetu\\AppData\\Local\\Temp\\tmp_dds05jk'
+
+        # img = imread(fname)
+        # os.remove(fname)
         return img
     except urllib.error.URLError as e:
         print('URL Error: ', e.reason, url)
@@ -85,5 +94,6 @@ def load_image(filename, size=None):
         min_idx = np.argmin(orig_shape)
         scale_factor = float(size) / orig_shape[min_idx]
         new_shape = (orig_shape * scale_factor).astype(int)
-        img = imresize(img, scale_factor)
+        # img = imresize(img, scale_factor)
+        img = np.array(Image.fromarray(img).resize((size, size)))
     return img
