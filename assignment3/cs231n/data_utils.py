@@ -4,7 +4,8 @@ from builtins import range
 from six.moves import cPickle as pickle
 import numpy as np
 import os
-from scipy.misc import imread
+# from scipy.misc import imread
+from imageio import imread
 import platform
 
 def load_pickle(f):
@@ -252,7 +253,8 @@ def load_imagenet_val(num=None):
       print('cd cs231n/datasets')
       print('bash get_imagenet_val.sh')
       assert False, 'Need to download imagenet_val_25.npz'
-    f = np.load(imagenet_fn)
+    f = np.load(imagenet_fn, allow_pickle=True)
+    # 这个np.load看vscode提示，allow_pickle应该是默认为True，却必须手动再设置一次才不会报错
     X = f['X']
     y = f['y']
     class_names = f['label_map'].item()

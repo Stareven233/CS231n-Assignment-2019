@@ -151,7 +151,13 @@ class CaptioningRNN(object):
         # (2)
         x, embed_cache = word_embedding_forward(captions_in, W_embed)
         # (3)
-        h, rnn_cache = rnn_forward(x, h0, Wx, Wh, b)
+        if self.cell_type == 'rnn':
+          h, rnn_cache = rnn_forward(x, h0, Wx, Wh, b)
+        elif self.cell_type == 'lstm':
+        # update the implementation of the loss method of the CaptioningRNN class in the 
+        # file cs231n/classifiers/rnn.py to handle the case where self.cell_type is lstm. 
+        # This should require adding less than 10 lines of code.
+          h, lstm_cache = lstm_forward(x, h0, Wx, Wh, b)
         # (4)
         scores, score_cache = temporal_affine_forward(h, W_vocab, b_vocab)
         # (5)
@@ -159,10 +165,15 @@ class CaptioningRNN(object):
 
         # backword pass
         dh, grads['W_vocab'], grads['b_vocab'] = temporal_affine_backward(dscores, score_cache)
-        dx, dh0, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dh, rnn_cache)
+        if self.cell_type == 'rnn':
+          dx, dh0, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dh, rnn_cache)
+        elif self.cell_type == 'lstm':
+          dx, dh0, grads['Wx'], grads['Wh'], grads['b'] = lstm_backward(dh, lstm_cache)
         grads['W_embed'] = word_embedding_backward(dx, embed_cache)
         grads['W_proj'] = features.T @ dh0
         grads['b_proj'] = dh0.sum(axis=0)
+
+
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -235,11 +246,15 @@ class CaptioningRNN(object):
         x_next = np.ones((N, ), dtype=np.int32) * self._start
         # 因为下方将x_next作为index使用，必须要整型，x_embed = W_embed[x_next]
         h_prev = features @ W_proj + b_proj
+        c_prev = np.zeros_like(h_prev)   # for lstm
         for t in range(max_length):
             # (1)
             x_embed = W_embed[x_next]
             # (2)
-            h, _ = rnn_step_forward(x_embed, h_prev, Wx, Wh, b)
+            if self.cell_type == 'rnn':
+              h, _ = rnn_step_forward(x_embed, h_prev, Wx, Wh, b)
+            elif self.cell_type == 'lstm':
+              h, c_prev, _ = lstm_step_forward(x_embed, h_prev, c_prev, Wx, Wh, b)
             h_prev = h  # N, H
             # (3)
             scores = h @ W_vocab + b_vocab  # N, V

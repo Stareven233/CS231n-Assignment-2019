@@ -1,5 +1,3 @@
-#TODO First implement the function rnn_step_forward
-
 from __future__ import print_function, division
 from builtins import range
 import numpy as np
@@ -303,6 +301,7 @@ def sigmoid(x):
 
 
 def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
+    #先看 https://blog.csdn.net/FortiLZ/article/details/80958149
     """
     Forward pass for a single timestep of an LSTM.
 
@@ -331,6 +330,22 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    H = prev_h.shape[1]
+    a = x@Wx + prev_h@Wh + b
+    # 法一：手动切分
+    # i, f, o, g = a[:, :H], a[:, H:2*H], a[:, 2*H:3*H], a[:, 3*H:]
+
+    # 法二：
+    # i, f, o, g = np.hsplit(a, range(H, 4*H, H))
+    # https://blog.csdn.net/weixin_41010198/article/details/89103982
+
+    # 法三：
+    i, f, o, g = np.split(a, 4, axis=1)
+
+    i, f, o, g = sigmoid(i), sigmoid(f), sigmoid(o), np.tanh(g)
+    next_c = f*prev_c + i*g
+    next_h = o*np.tanh(next_c)
+    cache = (prev_c, next_c, i, f, o, g, Wx, Wh, x, prev_h)
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -367,6 +382,24 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    prev_c, next_c, i, f, o, g, Wx, Wh, x, prev_h = cache
+    dcur_c = dnext_c + (dnext_h*o) * (1 - np.tanh(next_c)**2)
+
+    dprev_c = dcur_c*f
+    df = dcur_c*prev_c * f*(1-f)
+    di = dcur_c*g * i*(1-i)
+    dg = dcur_c*i * (1 - g**2)
+    do = dnext_h*np.tanh(next_c) * o*(1-o)
+    # i, f, o, g = sigmoid(i), sigmoid(f), sigmoid(o), np.tanh(g)
+    # sigmoid' = sigmoid(x)*(1 - sigmoid(x))
+    # tanh' = 1 - tanh(x)**2
+
+    dw = np.hstack((di, df, do, dg, ))
+    dx = dw@Wx.T
+    dprev_h = dw@Wh.T
+    dWx = x.T@dw
+    dWh = prev_h.T@dw
+    db = dw.sum(axis=0)
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -406,6 +439,14 @@ def lstm_forward(x, h0, Wx, Wh, b):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    h_, c_ = h0, np.zeros_like(h0)
+    h = []
+    cache = []
+    for t in range(x.shape[1]):
+        h_, c_, cache_ = lstm_step_forward(x[:, t, :], h_, c_, Wx, Wh, b)
+        h.append(h_)
+        cache.append(cache_)
+    h = np.array(h).transpose(1, 0, 2)
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -438,6 +479,22 @@ def lstm_backward(dh, cache):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    N, T, H = dh.shape
+    D = cache[0][-2].shape[1]  # x.shape == (N, D)
+
+    dx = np.zeros((N, T, D))
+    dprev_h = np.zeros((N, H, ))
+    dprev_c = np.zeros((N, H, ))  # 没想到最后一层c导数还真就是0
+    dWx = np.zeros((D, 4*H, ))
+    dWh = np.zeros((H, 4*H, ))
+    db = np.zeros((4*H, ))
+
+    for t in range(T-1, -1, -1):
+        dx[:, t, :], dprev_h, dprev_c, *dw = lstm_step_backward(dh[:, t, :]+dprev_h, dprev_c, cache[t])
+        dWx += dw[0]
+        dWh += dw[1]
+        db += dw[2]
+    dh0 = dprev_h
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
